@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import AuthPage from "./auth/AuthPage";
+import AuthPage from "./AuthPage";
 
-export default function Home() {
+export default function AuthRoute() {
   const router = useRouter();
 
   return (
