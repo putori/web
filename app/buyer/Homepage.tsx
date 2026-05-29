@@ -1,10 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import BuyerNavbar from "@/components/buyer/BuyerNavbar";
+import type { AuctionDto, CategoryDto } from "@/lib/api";
+import { API_BASE } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// Unified product shape for display (wraps auction data)
 export interface Product {
   id: string;
   name: string;
@@ -13,98 +16,17 @@ export interface Product {
   bids: number;
   timeLeft: string;
   isHot?: boolean;
+  imageUrl?: string;
+  status: string;
 }
 
 export interface SearchCatalogPageProps {
-  products?: Product[];
+  auctions?: AuctionDto[];
+  categories?: CategoryDto[];
+  loading?: boolean;
   onProductClick?: (product: Product) => void;
   onSearch?: (query: string) => void;
 }
-
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-const DEFAULT_CATEGORIES = [
-  { name: "Chuột gaming", count: 342 },
-  { name: "Bàn phím cơ", count: 218 },
-  { name: "Tai nghe", count: 156 },
-  { name: "Màn hình", count: 89 },
-  { name: "Ghế gaming", count: 67 },
-];
-
-const DEFAULT_PRODUCTS: Product[] = [
-  {
-    id: "1",
-    name: "Razer DeathAdder V3",
-    category: "CHUỘT GAMING",
-    currentBid: 1250000,
-    bids: 24,
-    timeLeft: "02:14:33",
-    isHot: true,
-  },
-  {
-    id: "2",
-    name: "Logitech G Pro X TKL",
-    category: "BÀN PHÍM CƠ",
-    currentBid: 3800000,
-    bids: 41,
-    timeLeft: "05:42:10",
-    isHot: false,
-  },
-  {
-    id: "3",
-    name: "SteelSeries Arctis Nova 7",
-    category: "TAI NGHE",
-    currentBid: 2100000,
-    bids: 18,
-    timeLeft: "00:58:02",
-    isHot: true,
-  },
-  {
-    id: "4",
-    name: 'ASUS ROG Swift 32"',
-    category: "MÀN HÌNH 4K",
-    currentBid: 12500000,
-    bids: 7,
-    timeLeft: "11:20:45",
-    isHot: false,
-  },
-  {
-    id: "5",
-    name: "Corsair K100 RGB",
-    category: "BÀN PHÍM CƠ",
-    currentBid: 4200000,
-    bids: 12,
-    timeLeft: "08:00:00",
-    isHot: false,
-  },
-  {
-    id: "6",
-    name: "HyperX Cloud Alpha S",
-    category: "TAI NGHE",
-    currentBid: 1550000,
-    bids: 29,
-    timeLeft: "03:30:15",
-    isHot: false,
-  },
-  {
-    id: "7",
-    name: "Secretlab Titan Evo",
-    category: "GHẾ GAMING",
-    currentBid: 9800000,
-    bids: 5,
-    timeLeft: "23:11:44",
-    isHot: false,
-  },
-  {
-    id: "8",
-    name: "Benq Zowie XL2546K",
-    category: "MÀN HÌNH 240HZ",
-    currentBid: 8000000,
-    bids: 11,
-    timeLeft: "16:05:22",
-    isHot: false,
-  },
-];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -126,6 +48,33 @@ const C = {
 };
 
 const fmt = (n: number) => n.toLocaleString("vi-VN") + "đ";
+
+function timeLeftFromEndTime(endTime: string): string {
+  if (!endTime) return "--:--:--";
+  const diff = new Date(endTime).getTime() - Date.now();
+  if (diff <= 0) return "Đã kết thúc";
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function auctionToProduct(a: AuctionDto): Product {
+  return {
+    id: String(a.id),
+    name: a.product?.title ?? "Sản phẩm",
+    category: String(a.product?.categoryId ?? ""),
+    currentBid: Number(a.currentPrice ?? a.startingPrice ?? 0),
+    bids: 0,
+    timeLeft: timeLeftFromEndTime(a.endTime),
+    isHot: a.status === "OPEN",
+    imageUrl:
+      a.product?.images?.[0]?.url
+        ? `${API_BASE}/${a.product.images[0].url}`
+        : undefined,
+    status: a.status,
+  };
+}
 
 // ─── ProductCard ──────────────────────────────────────────────────────────────
 
@@ -163,29 +112,38 @@ function ProductCard({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          overflow: "hidden",
         }}
       >
-        <svg
-          width="48"
-          height="48"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={C.border}
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="5" y="2" width="14" height="20" rx="7" />
-          <path d="M12 2v8" />
-          <line x1="5" y1="10" x2="19" y2="10" />
-        </svg>
-        {product.isHot && (
+        {product.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={product.imageUrl}
+            alt={product.name}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          <svg
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={C.border}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="3" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
+          </svg>
+        )}
+        {product.isHot && product.status === "OPEN" && (
           <div
             style={{
               position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -130%)",
+              top: 8,
+              left: 8,
               background: C.hotRed,
               borderRadius: 5,
               padding: "3px 8px",
@@ -196,7 +154,7 @@ function ProductCard({
               fontFamily: "Inter, sans-serif",
             }}
           >
-            HOT
+            LIVE
           </div>
         )}
       </div>
@@ -229,6 +187,9 @@ function ProductCard({
             fontWeight: 600,
             lineHeight: 1.4,
             fontFamily: "Inter, sans-serif",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
           }}
         >
           {product.name}
@@ -250,15 +211,6 @@ function ProductCard({
             }}
           >
             {fmt(product.currentBid)}
-          </span>
-          <span
-            style={{
-              color: C.d,
-              fontSize: 11,
-              fontFamily: "Inter, sans-serif",
-            }}
-          >
-            · {product.bids} lượt
           </span>
         </div>
         <div
@@ -298,19 +250,56 @@ function ProductCard({
 // ─── SearchCatalogPage ────────────────────────────────────────────────────────
 
 export default function SearchCatalogPage({
-  products = DEFAULT_PRODUCTS,
+  auctions = [],
+  categories = [],
+  loading = false,
   onProductClick,
   onSearch,
 }: SearchCatalogPageProps) {
   const [query, setQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState("Chuột gaming");
+  const [activeCategory, setActiveCategory] = useState<number | null>(null);
   const [sort, setSort] = useState("Mới nhất");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "OPEN" | "ENDED">("ALL");
 
-  const filtered = products.filter((p) => {
-    if (query && !p.name.toLowerCase().includes(query.toLowerCase()))
-      return false;
-    return true;
-  });
+  const products = useMemo(() => auctions.map(auctionToProduct), [auctions]);
+
+  const filtered = useMemo(() => {
+    let list = products;
+
+    if (query) {
+      list = list.filter((p) =>
+        p.name.toLowerCase().includes(query.toLowerCase())
+      );
+    }
+
+    if (activeCategory !== null) {
+      list = list.filter(
+        (p) => p.category === String(activeCategory)
+      );
+    }
+
+    if (minPrice) {
+      const min = Number(minPrice.replace(/\D/g, ""));
+      if (!isNaN(min)) list = list.filter((p) => p.currentBid >= min);
+    }
+    if (maxPrice) {
+      const max = Number(maxPrice.replace(/\D/g, ""));
+      if (!isNaN(max)) list = list.filter((p) => p.currentBid <= max);
+    }
+
+    if (statusFilter === "OPEN") list = list.filter((p) => p.status === "OPEN");
+    if (statusFilter === "ENDED")
+      list = list.filter((p) => p.status !== "OPEN");
+
+    if (sort === "Giá thấp nhất")
+      list = [...list].sort((a, b) => a.currentBid - b.currentBid);
+    if (sort === "Giá cao nhất")
+      list = [...list].sort((a, b) => b.currentBid - a.currentBid);
+
+    return list;
+  }, [products, query, activeCategory, minPrice, maxPrice, statusFilter, sort]);
 
   return (
     <div
@@ -457,7 +446,6 @@ export default function SearchCatalogPage({
             alignItems: "center",
             gap: 8,
             whiteSpace: "nowrap",
-            cursor: "pointer",
           }}
         >
           <span>Sắp xếp:</span>
@@ -478,7 +466,6 @@ export default function SearchCatalogPage({
               "Mới nhất",
               "Giá thấp nhất",
               "Giá cao nhất",
-              "Nhiều lượt đặt",
             ].map((o) => (
               <option key={o}>{o}</option>
             ))}
@@ -523,10 +510,39 @@ export default function SearchCatalogPage({
           >
             Danh mục
           </p>
-          {DEFAULT_CATEGORIES.map((cat) => (
+          <button
+            onClick={() => setActiveCategory(null)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              width: "100%",
+              padding: "7px 8px",
+              borderRadius: 8,
+              marginBottom: 2,
+              background: activeCategory === null ? "#1a1e2e" : "transparent",
+              border: "none",
+              cursor: "pointer",
+              textAlign: "left",
+              fontFamily: "Inter, sans-serif",
+            }}
+          >
+            <span
+              style={{
+                color: activeCategory === null ? C.orange : C.p,
+                fontSize: 13,
+                fontWeight: activeCategory === null ? 600 : 400,
+              }}
+            >
+              Tất cả
+            </span>
+          </button>
+          {categories.map((cat) => (
             <button
-              key={cat.name}
-              onClick={() => setActiveCategory(cat.name)}
+              key={cat.id}
+              onClick={() =>
+                setActiveCategory(activeCategory === cat.id ? null : cat.id)
+              }
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -536,35 +552,21 @@ export default function SearchCatalogPage({
                 borderRadius: 8,
                 marginBottom: 2,
                 background:
-                  activeCategory === cat.name ? "#1a1e2e" : "transparent",
+                  activeCategory === cat.id ? "#1a1e2e" : "transparent",
                 border: "none",
                 cursor: "pointer",
                 textAlign: "left",
                 fontFamily: "Inter, sans-serif",
-                transition: "background 0.15s",
               }}
             >
               <span
                 style={{
-                  color: activeCategory === cat.name ? C.orange : C.p,
+                  color: activeCategory === cat.id ? C.orange : C.p,
                   fontSize: 13,
-                  fontWeight: activeCategory === cat.name ? 600 : 400,
-                  fontFamily: "Inter, sans-serif",
+                  fontWeight: activeCategory === cat.id ? 600 : 400,
                 }}
               >
                 {cat.name}
-              </span>
-              <span
-                style={{
-                  background: C.divider,
-                  borderRadius: 4,
-                  padding: "2px 6px",
-                  color: C.m,
-                  fontSize: 11,
-                  fontFamily: "Inter, sans-serif",
-                }}
-              >
-                {cat.count}
               </span>
             </button>
           ))}
@@ -584,7 +586,9 @@ export default function SearchCatalogPage({
           </p>
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <input
-              defaultValue="100K"
+              value={minPrice}
+              onChange={(e) => setMinPrice(e.target.value)}
+              placeholder="Từ"
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -601,7 +605,9 @@ export default function SearchCatalogPage({
               }}
             />
             <input
-              defaultValue="5.000K"
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(e.target.value)}
+              placeholder="Đến"
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -632,71 +638,105 @@ export default function SearchCatalogPage({
           >
             Trạng thái
           </p>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "6px 0",
-              cursor: "pointer",
-            }}
-          >
+          {(
+            [
+              { label: "Tất cả", value: "ALL" },
+              { label: "Đang diễn ra", value: "OPEN", dot: "#ef4444" },
+              { label: "Đã kết thúc", value: "ENDED", dot: "#f59e0b" },
+            ] as { label: string; value: "ALL" | "OPEN" | "ENDED"; dot?: string }[]
+          ).map((s) => (
             <div
+              key={s.value}
+              onClick={() => setStatusFilter(s.value)}
               style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: "#ef4444",
-                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 8px",
+                borderRadius: 8,
+                cursor: "pointer",
+                background:
+                  statusFilter === s.value ? "#1a1e2e" : "transparent",
+                marginBottom: 2,
               }}
-            />
-            <span style={{ fontSize: 13, color: C.p }}>Đang diễn ra</span>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "6px 0",
-              cursor: "pointer",
-            }}
-          >
-            <div
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: "#f59e0b",
-                flexShrink: 0,
-              }}
-            />
-            <span style={{ fontSize: 13, color: C.m }}>Sắp kết thúc</span>
-          </div>
+            >
+              {s.dot && (
+                <div
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: s.dot,
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+              <span
+                style={{
+                  fontSize: 13,
+                  color: statusFilter === s.value ? C.orange : C.p,
+                  fontWeight: statusFilter === s.value ? 600 : 400,
+                }}
+              >
+                {s.label}
+              </span>
+            </div>
+          ))}
         </div>
 
         {/* Product Grid */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ color: C.m, fontSize: 13, marginBottom: 16 }}>
-            <strong style={{ color: C.p, fontWeight: 600 }}>
-              {filtered.length}
-            </strong>{" "}
-            sản phẩm
-          </p>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: 16,
-            }}
-          >
-            {filtered.map((p) => (
-              <ProductCard
-                key={p.id}
-                product={p}
-                onClick={() => onProductClick?.(p)}
-              />
-            ))}
-          </div>
+          {loading ? (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                height: 200,
+                color: C.m,
+                fontSize: 14,
+              }}
+            >
+              Đang tải dữ liệu...
+            </div>
+          ) : (
+            <>
+              <p style={{ color: C.m, fontSize: 13, marginBottom: 16 }}>
+                <strong style={{ color: C.p, fontWeight: 600 }}>
+                  {filtered.length}
+                </strong>{" "}
+                sản phẩm
+              </p>
+              {filtered.length === 0 ? (
+                <div
+                  style={{
+                    color: C.m,
+                    fontSize: 14,
+                    textAlign: "center",
+                    padding: "60px 0",
+                  }}
+                >
+                  Không tìm thấy sản phẩm nào.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, 1fr)",
+                    gap: 16,
+                  }}
+                >
+                  {filtered.map((p) => (
+                    <ProductCard
+                      key={p.id}
+                      product={p}
+                      onClick={() => onProductClick?.(p)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -8,14 +8,15 @@ export interface AuthPageProps {
   onLogin?: (data: { email: string; password: string }) => void;
   onRegister?: (data: {
     fullName: string;
-    username: string;
     email: string;
     password: string;
     confirmPassword: string;
   }) => void;
-  onGoogleAuth?: () => void;
   onForgotPassword?: () => void;
   initialTab?: AuthTab;
+  loginError?: string;
+  registerError?: string;
+  loading?: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -167,74 +168,20 @@ function OrangeButton({
   );
 }
 
-function GhostButton({
-  children,
-  onClick,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        width: "100%",
-        height: 46,
-        backgroundColor: hovered ? "#252a3e" : COLOR.field,
-        border: `1px solid ${COLOR.border}`,
-        borderRadius: 10,
-        color: COLOR.textPrimary,
-        fontFamily: "Inter, sans-serif",
-        fontSize: 14,
-        fontWeight: 400,
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 10,
-        transition: "background-color 0.15s",
-      }}
-    >
-      {/* Google "G" logo */}
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <path
-          d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.616z"
-          fill="#4285F4"
-        />
-        <path
-          d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z"
-          fill="#34A853"
-        />
-        <path
-          d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
-          fill="#FBBC05"
-        />
-        <path
-          d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"
-          fill="#EA4335"
-        />
-      </svg>
-      {children}
-    </button>
-  );
-}
-
 // ─── Login Form ───────────────────────────────────────────────────────────────
 
 function LoginForm({
   onLogin,
-  onGoogleAuth,
   onForgotPassword,
   onSwitchToRegister,
+  error,
+  loading,
 }: {
   onLogin?: AuthPageProps["onLogin"];
-  onGoogleAuth?: () => void;
   onForgotPassword?: () => void;
   onSwitchToRegister: () => void;
+  error?: string;
+  loading?: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -261,7 +208,6 @@ function LoginForm({
       >
         Chào mừng trở lại!
       </h2>
-      {/* Subtitle */}
       <p
         style={{
           margin: "0 0 20px",
@@ -274,9 +220,27 @@ function LoginForm({
         Đăng nhập để tiếp tục mua sắm và đấu giá.
       </p>
 
+      {error && (
+        <div
+          style={{
+            background: "rgba(239,68,68,0.1)",
+            border: "1px solid #ef4444",
+            borderRadius: 8,
+            padding: "10px 14px",
+            color: "#ef4444",
+            fontSize: 13,
+            fontFamily: "Inter, sans-serif",
+            marginBottom: 14,
+          }}
+        >
+          {error}
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <Field
-          label="Email hoặc tên đăng nhập"
+          label="Email"
+          type="email"
           placeholder="Nhập email của bạn..."
           value={email}
           onChange={setEmail}
@@ -308,7 +272,6 @@ function LoginForm({
         />
       </div>
 
-      {/* Forgot password */}
       <button
         type="button"
         onClick={onForgotPassword}
@@ -326,33 +289,10 @@ function LoginForm({
         Quên mật khẩu?
       </button>
 
-      <OrangeButton type="submit">Đăng nhập</OrangeButton>
+      <OrangeButton type="submit" disabled={loading}>
+        {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+      </OrangeButton>
 
-      {/* Divider */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          margin: "14px 0",
-        }}
-      >
-        <div style={{ flex: 1, height: 1, backgroundColor: COLOR.divider }} />
-        <span
-          style={{
-            color: COLOR.textMuted,
-            fontFamily: "Inter, sans-serif",
-            fontSize: 13,
-          }}
-        >
-          hoặc
-        </span>
-        <div style={{ flex: 1, height: 1, backgroundColor: COLOR.divider }} />
-      </div>
-
-      <GhostButton onClick={onGoogleAuth}>Tiếp tục với Google</GhostButton>
-
-      {/* Switch to register */}
       <p
         style={{
           margin: "16px 0 0",
@@ -388,15 +328,16 @@ function LoginForm({
 
 function RegisterForm({
   onRegister,
-  onGoogleAuth,
   onSwitchToLogin,
+  error,
+  loading,
 }: {
   onRegister?: AuthPageProps["onRegister"];
-  onGoogleAuth?: () => void;
   onSwitchToLogin: () => void;
+  error?: string;
+  loading?: boolean;
 }) {
   const [fullName, setFullName] = useState("");
-  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -408,7 +349,7 @@ function RegisterForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!passwordMatch) return;
-    onRegister?.({ fullName, username, email, password, confirmPassword });
+    onRegister?.({ fullName, email, password, confirmPassword });
   };
 
   return (
@@ -439,26 +380,30 @@ function RegisterForm({
         Đăng ký để bắt đầu mua sắm và đấu giá ngay hôm nay.
       </p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {/* Row: Full name + Username */}
-        <div style={{ display: "flex", gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <Field
-              label="Họ và tên"
-              placeholder="Nguyễn Văn A"
-              value={fullName}
-              onChange={setFullName}
-            />
-          </div>
-          <div style={{ flex: 1 }}>
-            <Field
-              label="Tên người dùng"
-              placeholder="techgamer_pro"
-              value={username}
-              onChange={setUsername}
-            />
-          </div>
+      {error && (
+        <div
+          style={{
+            background: "rgba(239,68,68,0.1)",
+            border: "1px solid #ef4444",
+            borderRadius: 8,
+            padding: "10px 14px",
+            color: "#ef4444",
+            fontSize: 13,
+            fontFamily: "Inter, sans-serif",
+            marginBottom: 14,
+          }}
+        >
+          {error}
         </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <Field
+          label="Họ và tên"
+          placeholder="Nguyễn Văn A"
+          value={fullName}
+          onChange={setFullName}
+        />
 
         <Field
           label="Email"
@@ -563,33 +508,12 @@ function RegisterForm({
         </span>
       </label>
 
-      <OrangeButton type="submit" disabled={!agreed || !passwordMatch}>
-        Tạo tài khoản
-      </OrangeButton>
-
-      {/* Divider */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          margin: "14px 0",
-        }}
+      <OrangeButton
+        type="submit"
+        disabled={!agreed || !passwordMatch || loading}
       >
-        <div style={{ flex: 1, height: 1, backgroundColor: COLOR.divider }} />
-        <span
-          style={{
-            color: COLOR.textMuted,
-            fontFamily: "Inter, sans-serif",
-            fontSize: 13,
-          }}
-        >
-          hoặc
-        </span>
-        <div style={{ flex: 1, height: 1, backgroundColor: COLOR.divider }} />
-      </div>
-
-      <GhostButton onClick={onGoogleAuth}>Tiếp tục với Google</GhostButton>
+        {loading ? "Đang tạo tài khoản..." : "Tạo tài khoản"}
+      </OrangeButton>
 
       <p
         style={{
@@ -627,9 +551,11 @@ function RegisterForm({
 export default function AuthPage({
   onLogin,
   onRegister,
-  onGoogleAuth,
   onForgotPassword,
   initialTab = "login",
+  loginError,
+  registerError,
+  loading,
 }: AuthPageProps) {
   const [tab, setTab] = useState<AuthTab>(initialTab);
 
@@ -879,15 +805,17 @@ export default function AuthPage({
             {tab === "login" ? (
               <LoginForm
                 onLogin={onLogin}
-                onGoogleAuth={onGoogleAuth}
                 onForgotPassword={onForgotPassword}
                 onSwitchToRegister={() => setTab("register")}
+                error={loginError}
+                loading={loading}
               />
             ) : (
               <RegisterForm
                 onRegister={onRegister}
-                onGoogleAuth={onGoogleAuth}
                 onSwitchToLogin={() => setTab("login")}
+                error={registerError}
+                loading={loading}
               />
             )}
           </div>

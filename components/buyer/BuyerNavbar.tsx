@@ -1,25 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Zap, Bell, ShoppingBag, Clock, Wallet } from "lucide-react";
 import Link from "next/link";
 import NotificationPopup from "@/components/buyer/NotificationPopup";
 import BuyerPopup from "@/components/common/ProfilePopup";
+import { getUser, clearAuth } from "@/lib/api";
 
 interface BuyerNavbarProps {
   activePage?: "products" | "topup" | "history";
-  userName?: string;
   notificationCount?: number;
 }
 
 export default function BuyerNavbar({
   activePage,
-  userName = "K",
   notificationCount = 3,
 }: BuyerNavbarProps) {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [userName, setUserName] = useState("U");
+  const [userEmail, setUserEmail] = useState("");
+
+  useEffect(() => {
+    const user = getUser();
+    if (user) {
+      setUserName(user.fullName || user.email || "U");
+      setUserEmail(user.email || "");
+    }
+  }, []);
+
+  const handleLogout = () => {
+    clearAuth();
+    setShowProfile(false);
+    router.push("/");
+  };
 
   const navLinks = [
     {
@@ -144,9 +161,9 @@ export default function BuyerNavbar({
               style={{ position: "absolute", top: 48, right: 0, width: 280 }}
             >
               <BuyerPopup
-                user={{ username: userName, email: "" }}
+                user={{ username: userName, email: userEmail }}
                 onClose={() => setShowProfile(false)}
-                onLogout={() => setShowProfile(false)}
+                onLogout={handleLogout}
               />
             </div>
           )}
