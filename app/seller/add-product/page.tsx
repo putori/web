@@ -9,10 +9,14 @@ export default function AddProductPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  
-  // Trạng thái bật/tắt popup xem trước
   const [showPreviewModal, setShowPreviewModal] = useState(false);
-
+  const [loading, setLoading] = useState(false);
+  const getLocalDateTimeString = () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(now.getTime() - offset).toISOString();
+    return localISOTime.slice(0, 16);
+  };
   const [formData, setFormData] = useState({
     name: "",
     category: "Chuột gaming",
@@ -23,7 +27,7 @@ export default function AddProductPage() {
     minIncrement: "50000",
     buyNowPrice: "1800000",
     duration: "5 ngày",
-    startDate: "2026-04-19T20:00",
+    startDate: getLocalDateTimeString(),
     resetTime: "12",
     hasWarranty: true,
     warrantyStartDate: "2026-04-19",
@@ -32,7 +36,8 @@ export default function AddProductPage() {
     specificAddress: "123 Nguyễn Trãi, Phường 2",
   });
 
-  const [images, setImages] = useState<string[]>([]);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -46,12 +51,13 @@ export default function AddProductPage() {
 
   const processFiles = (files: FileList) => {
     const filesArray = Array.from(files).filter(file => file.type.startsWith("image/"));
-    if (images.length + filesArray.length > 8) {
+    if (imageFiles.length + filesArray.length > 8) {
       alert("Tối đa 8 ảnh!");
       return;
     }
+    setImageFiles((prev) => [...prev, ...filesArray]);
     const newImageUrls = filesArray.map((file) => URL.createObjectURL(file));
-    setImages((prev) => [...prev, ...newImageUrls]);
+    setImagePreviews((prev) => [...prev, ...newImageUrls]);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,16 +87,80 @@ export default function AddProductPage() {
     fileInputRef.current?.click();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const removeImage = (idx: number) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== idx));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const finalCategory = formData.category === "Khác" ? formData.customCategory : formData.category;
-    console.log("Submit Form Data:", { 
-      ...formData, 
-      category: finalCategory, 
-      images 
-    });
-    alert("Đăng sản phẩm thành công!");
-    router.push("/seller");
+    setLoading(true);
+
+    try {
+      const authHeader = 'Basic ' + btoa('user:315686f2-4834-40c8-905f-5380ac9f5991');
+
+      const productPayload = new FormData();
+      const productData = {
+        categoryId: 1, 
+        title: formData.name,
+        description: `${formData.condition}\n${formData.description}`,
+        sellerId: 1, 
+        price: Number(formData.buyNowPrice) || Number(formData.startPrice),
+        status: "ACTIVE"
+      };
+
+      productPayload.append("data", new Blob([JSON.stringify(productData)], { type: "application/json" }));
+      imageFiles.forEach(file => {
+        productPayload.append("images", file);
+      });
+
+      const productRes = await fetch("http://localhost:8080/products", {
+        method: "POST",
+        headers: {
+          'Authorization': authHeader
+        },
+        body: productPayload
+      });
+
+      if (!productRes.ok) throw new Error("Lỗi khi tạo sản phẩm");
+      const productJson = await productRes.json();
+      const newProductId = productJson.data.id;
+
+      const startDateTime = new Date(formData.startDate);
+      const daysToAdd = parseInt(formData.duration.split(" ")[0]);
+      const endDateTime = new Date(startDateTime);
+      endDateTime.setDate(endDateTime.getDate() + daysToAdd);
+
+      const auctionData = {
+        productId: newProductId,
+        startTime: startDateTime.toISOString(),
+        endTime: endDateTime.toISOString(),
+        startingPrice: Number(formData.startPrice),
+        minimumStep: Number(formData.minIncrement),
+        enableExtentTime: true,
+        threshhold: Number(formData.resetTime)
+      };
+
+      const auctionRes = await fetch("http://localhost:8080/auctions", {
+        method: "POST",
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(auctionData)
+      });
+
+      if (!auctionRes.ok) throw new Error("Lỗi khi tạo phiên đấu giá");
+
+      alert("Đăng sản phẩm thành công!");
+      router.push("/seller");
+
+    } catch (error) {
+      console.error("Submit Error:", error);
+      alert("Đã xảy ra lỗi khi đăng sản phẩm. Vui lòng kiểm tra console log.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -361,12 +431,12 @@ export default function AddProductPage() {
                 </button>
               </div>
 
-              {images.length > 0 && (
+              {imagePreviews.length > 0 && (
                 <div className="grid grid-cols-4 gap-3">
-                  {images.map((img, idx) => (
+                  {imagePreviews.map((img, idx) => (
                     <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-[#0f1117] border border-white/10">
                       <img src={img} alt="preview" className="w-full h-full object-cover" />
-                      <button type="button" onClick={() => setImages(prev => prev.filter((_, i) => i !== idx))} className="absolute top-1.5 right-1.5 p-1.5 bg-black/70 rounded-full text-gray-400 hover:text-white cursor-pointer">
+                      <button type="button" onClick={(e) => { e.stopPropagation(); removeImage(idx); }} className="absolute top-1.5 right-1.5 p-1.5 bg-black/70 rounded-full text-gray-400 hover:text-white cursor-pointer">
                         <X size={14} />
                       </button>
                     </div>
@@ -382,8 +452,8 @@ export default function AddProductPage() {
 
               <div className="bg-[#0f1117] rounded-xl border border-white/5 overflow-hidden p-6 space-y-5">
                 <div className="aspect-[4/3] bg-slate-800 rounded-lg w-full overflow-hidden relative flex items-center justify-center text-gray-500 text-base">
-                  {images.length > 0 ? (
-                    <img src={images[0]} alt="bìa" className="w-full h-full object-cover" />
+                  {imagePreviews.length > 0 ? (
+                    <img src={imagePreviews[0]} alt="bìa" className="w-full h-full object-cover" />
                   ) : (
                     "Chưa có hình ảnh"
                   )}
@@ -400,8 +470,8 @@ export default function AddProductPage() {
                         i === 0 ? "border-orange-500/60" : "border-white/5"
                       }`}
                     >
-                      {images[i] ? (
-                        <img src={images[i]} alt={`thumbnail-${i}`} className="w-full h-full object-cover" />
+                      {imagePreviews[i] ? (
+                        <img src={imagePreviews[i]} alt={`thumbnail-${i}`} className="w-full h-full object-cover" />
                       ) : (
                         "-"
                       )}
@@ -415,7 +485,7 @@ export default function AddProductPage() {
                   </h3>
                   <div className="flex items-center gap-2 text-sm text-gray-400 mt-1">
                     <Clock size={16} className="text-red-400" />
-                    <span>Bắt đầu: 19/04/2026 · 20:00</span>
+                    <span>Bắt đầu: {formData.startDate ? new Date(formData.startDate).toLocaleString("vi-VN") : "..."}</span>
                   </div>
                 </div>
 
@@ -424,12 +494,6 @@ export default function AddProductPage() {
                     <p className="text-xs text-gray-500 uppercase tracking-wider font-bold">Giá khởi điểm</p>
                     <p className="text-xl font-black text-orange-400 mt-1.5">
                       {Number(formData.startPrice).toLocaleString("vi-VN")}đ
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500 uppercase tracking-wider font-bold">Kết thúc (Dự kiến)</p>
-                    <p className="text-base font-bold text-red-400 mt-1.5">
-                      24/04 · 20:00
                     </p>
                   </div>
                 </div>
@@ -445,9 +509,10 @@ export default function AddProductPage() {
                 </button>
                 <button
                   type="submit"
-                  className="w-full py-4 text-lg font-black rounded-lg bg-[#f97316] hover:bg-orange-600 text-white transition shadow-lg shadow-orange-500/20 cursor-pointer"
+                  disabled={loading}
+                  className="w-full py-4 text-lg font-black rounded-lg bg-[#f97316] hover:bg-orange-600 disabled:opacity-50 text-white transition shadow-lg shadow-orange-500/20 cursor-pointer"
                 >
-                  Đăng sản phẩm ngay
+                  {loading ? "Đang xử lý..." : "Đăng sản phẩm ngay"}
                 </button>
               </div>
             </div>
@@ -468,8 +533,8 @@ export default function AddProductPage() {
             
             <div className="w-full md:w-1/2 bg-[#0f1117] flex items-center justify-center p-8 border-r border-white/5">
               <div className="aspect-square w-full bg-[#14161d] rounded-xl border border-white/10 flex items-center justify-center overflow-hidden relative">
-                 {images.length > 0 ? (
-                    <img src={images[0]} alt="preview" className="w-full h-full object-cover" />
+                 {imagePreviews.length > 0 ? (
+                    <img src={imagePreviews[0]} alt="preview" className="w-full h-full object-cover" />
                   ) : (
                     <Eye size={48} className="text-gray-800" />
                   )}
