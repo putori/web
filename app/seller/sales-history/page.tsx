@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import SellerNavbar from "../../../components/seller/SellerNavbar";
 import StatList, { StatItem } from "../../../components/seller/StatList";
 import GenericTable, { Column } from "../../../components/seller/GenericTable";
 
 type Product = {
+  id: number;
   name: string;
+  imageUrl: string;
   category: string;
   type: "Đấu giá" | "Mua ngay";
   price: string;
@@ -15,127 +17,129 @@ type Product = {
   soldDate: string;
   status: string;
   statusClass: string;
+  rawDate: Date;
 };
 
 export default function SalesHistoryPage() {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState<"all" | "auction" | "buyNow" | "month">("all");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const statItems: StatItem[] = [
-    {
-      title: "Tổng đã bán",
-      value: 156,
-      subText: "+12 tháng này",
-      color: "green",
-    },
-    {
-      title: "Doanh thu",
-      value: "248.500.000₫",
-      color: "orange",
-    },
-    {
-      title: "Giá trung bình",
-      value: "1.593.000₫",
-      color: "blue",
-    },
-    {
-      title: "Tỷ lệ thành công",
-      value: "94.2%",
-      color: "white",
-    },
-  ];
+  const [stats, setStats] = useState<StatItem[]>([
+    { title: "Tổng đã bán", value: 0, subText: "+0 tháng này", color: "green" },
+    { title: "Doanh thu", value: "0đ", color: "orange" },
+    { title: "Giá trung bình", value: "0đ", color: "blue" },
+    { title: "Tỷ lệ thành công", value: "100%", color: "white" },
+  ]);
 
-  const products: Product[] = [
-    {
-      name: "Razer DeathAdder V3 HyperSpeed",
-      category: "Chuột gaming",
-      type: "Đấu giá",
-      price: "1.250.000đ",
-      buyer: "gamer_khoa_123",
-      soldDate: "10/04/2026",
-      status: "Đấu trúng",
-      statusClass: "bg-green-500/10 text-green-500",
-    },
-    {
-      name: "Logitech G Pro X TKL",
-      category: "Bàn phím cơ",
-      type: "Đấu giá",
-      price: "3.800.000đ",
-      buyer: "pro_player_huy",
-      soldDate: "08/04/2026",
-      status: "Đấu trúng",
-      statusClass: "bg-green-500/10 text-green-500",
-    },
-    {
-      name: "SteelSeries Arctis Nova 7",
-      category: "Tai nghe",
-      type: "Mua ngay",
-      price: "2.100.000đ",
-      buyer: "technoob_9x",
-      soldDate: "06/04/2026",
-      status: "Đã bán",
-      statusClass: "bg-amber-500/10 text-amber-500",
-    },
-    {
-      name: "HyperX Pulsefire Haste 2",
-      category: "Chuột gaming",
-      type: "Đấu giá",
-      price: "980.000đ",
-      buyer: "lele_gaming_vn",
-      soldDate: "04/04/2026",
-      status: "Đấu trúng",
-      statusClass: "bg-green-500/10 text-green-500",
-    },
-    {
-      name: "Glorious Model O Wireless",
-      category: "Chuột gaming",
-      type: "Mua ngay",
-      price: "1.450.000đ",
-      buyer: "vnprogamer_2005",
-      soldDate: "02/04/2026",
-      status: "Đã bán",
-      statusClass: "bg-amber-500/10 text-amber-500",
-    },
-    {
-      name: "Corsair HS70 Pro Wireless",
-      category: "Tai nghe",
-      type: "Đấu giá",
-      price: "1.100.000đ",
-      buyer: "hanoi_gamer99",
-      soldDate: "30/03/2026",
-      status: "Đấu trúng",
-      statusClass: "bg-green-500/10 text-green-500",
-    },
-    {
-      name: "ASUS ROG Strix Scope NX",
-      category: "Bàn phím cơ",
-      type: "Đấu giá",
-      price: "2.250.000đ",
-      buyer: "saigon_esports",
-      soldDate: "28/03/2026",
-      status: "Đấu trúng",
-      statusClass: "bg-green-500/10 text-green-500",
-    },
-    {
-      name: "Razer Basilisk V3 Pro",
-      category: "Chuột gaming",
-      type: "Mua ngay",
-      price: "1.800.000đ",
-      buyer: "streamer_kid_95",
-      soldDate: "26/03/2026",
-      status: "Đã bán",
-      statusClass: "bg-amber-500/10 text-amber-500",
-    },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const authHeader = 'Basic ' + btoa('user:315686f2-4834-40c8-905f-5380ac9f5991'); 
+        
+        const requestOptions = {
+          method: 'GET',
+          headers: {
+            'Authorization': authHeader,
+            'Content-Type': 'application/json'
+          }
+        };
+
+        const orderRes = await fetch("http://localhost:8080/orders?size=50", requestOptions);
+        const orderJson = await orderRes.json();
+        
+        if (!orderJson.data || !orderJson.data.items) return;
+
+        const orders = orderJson.data.items;
+        let totalRevenue = 0; // Biến tính tổng doanh thu
+
+        const combinedData = await Promise.all(
+          orders.map(async (order: any) => {
+            let productName = "Đang cập nhật...";
+            let categoryName = "Chưa rõ";
+            let imageUrl = "";
+
+            totalRevenue += order.amount; // Cộng dồn doanh thu
+
+            if (order.auctionId) {
+              try {
+                const aucRes = await fetch(`http://localhost:8080/auctions/${order.auctionId}`, requestOptions);
+                const aucJson = await aucRes.json();
+                
+                if (aucJson.data && aucJson.data.product) {
+                  const prod = aucJson.data.product;
+                  productName = prod.title;
+                  categoryName = `Danh mục #${prod.categoryId}`;
+                  if (prod.images && prod.images.length > 0) {
+                    imageUrl = prod.images[0].imageUrl;
+                  }
+                }
+              } catch (err) {
+                console.error(err);
+              }
+            }
+
+            let statusText = "Chờ xử lý";
+            let statusClass = "bg-slate-500/10 text-slate-400";
+            if (order.status === "PAID") {
+              statusText = "Đã thanh toán";
+              statusClass = "bg-green-500/10 text-green-500";
+            } else if (order.status === "PENDING") {
+              statusText = "Chờ thanh toán";
+              statusClass = "bg-amber-500/10 text-amber-500";
+            } else if (order.status === "CANCELED") {
+              statusText = "Đã hủy";
+              statusClass = "bg-red-500/10 text-red-500";
+            }
+
+            return {
+              id: order.id,
+              name: productName,
+              imageUrl: imageUrl,
+              category: categoryName,
+              type: "Đấu giá",
+              price: order.amount.toLocaleString("vi-VN") + "đ",
+              buyer: `User #${order.buyerId}`,
+              soldDate: new Date(order.createdAt).toLocaleDateString("vi-VN"),
+              status: statusText,
+              statusClass: statusClass,
+              rawDate: new Date(order.createdAt),
+            };
+          })
+        );
+
+        setProducts(combinedData);
+
+        const avgPrice = orders.length > 0 ? Math.round(totalRevenue / orders.length) : 0;
+
+        setStats([
+          { title: "Tổng đã bán", value: combinedData.length, subText: "+0 tháng này", color: "green" },
+          { title: "Doanh thu", value: totalRevenue.toLocaleString("vi-VN") + "đ", color: "orange" },
+          { title: "Giá trung bình", value: avgPrice.toLocaleString("vi-VN") + "đ", color: "blue" },
+          { title: "Tỷ lệ thành công", value: "100%", color: "white" },
+        ]);
+
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   const columns: Column<Product>[] = [
     {
       key: "name",
       label: "Sản phẩm",
-      render: (value) => (
+      render: (_, row) => (
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-lg bg-slate-800/80 flex-shrink-0" />
-          <span className="font-medium text-white">{String(value)}</span>
+          <div className="w-10 h-10 rounded-lg bg-slate-800/80 flex-shrink-0 overflow-hidden flex items-center justify-center">
+             {row.imageUrl ? <img src={row.imageUrl} alt="img" className="w-full h-full object-cover"/> : <span className="text-xs text-gray-500">No img</span>}
+          </div>
+          <span className="font-medium text-white line-clamp-2">{row.name}</span>
         </div>
       ),
     },
@@ -148,13 +152,7 @@ export default function SalesHistoryPage() {
       key: "type",
       label: "Kiểu bán",
       render: (value) => (
-        <span
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
-            value === "Đấu giá"
-              ? "bg-amber-500/10 text-amber-500"
-              : "bg-purple-500/10 text-purple-400"
-          }`}
-        >
+        <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-500">
           {String(value)}
         </span>
       ),
@@ -167,7 +165,7 @@ export default function SalesHistoryPage() {
     {
       key: "buyer",
       label: "Người mua",
-      render: (value) => <span className="text-slate-400">{String(value)}</span>,
+      render: (value) => <span className="text-slate-400 font-medium">{String(value)}</span>,
     },
     {
       key: "soldDate",
@@ -193,18 +191,16 @@ export default function SalesHistoryPage() {
         return products.filter((product) => product.type === "Mua ngay");
       case "month":
         return products.filter((product) => {
-          const [day, month, year] = product.soldDate.split("/");
-          const productDate = new Date(Number(year), Number(month) - 1, Number(day));
           const now = new Date();
           return (
-            productDate.getMonth() === now.getMonth() &&
-            productDate.getFullYear() === now.getFullYear()
+            product.rawDate.getMonth() === now.getMonth() &&
+            product.rawDate.getFullYear() === now.getFullYear()
           );
         });
       default:
         return products;
     }
-  }, [activeFilter]);
+  }, [activeFilter, products]);
 
   return (
     <div className="min-h-screen bg-[#0b0c10] text-[#e0e3ea] flex flex-col">
@@ -218,56 +214,42 @@ export default function SalesHistoryPage() {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-8 space-y-8">
-        <StatList items={statItems} />
+        <StatList items={stats} />
         
         <div className="bg-[#14161d] p-6 rounded-xl border border-white/5 space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white">Lịch sử bán hàng</h2>
 
             <div className="flex gap-3">
-              <button
-                onClick={() => setActiveFilter("all")}
-                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition ${
-                  activeFilter === "all"
-                    ? "bg-[#f97316] text-white"
-                    : "bg-[#1a1d27] text-gray-400 hover:text-white"
-                }`}
-              >
-                Tất cả
-              </button>
-              <button
-                onClick={() => setActiveFilter("auction")}
-                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition ${
-                  activeFilter === "auction"
-                    ? "bg-[#f97316] text-white"
-                    : "bg-[#1a1d27] text-gray-400 hover:text-white"
-                }`}
-              >
-                Đấu giá
-              </button>
-              <button
-                onClick={() => setActiveFilter("buyNow")}
-                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition ${
-                  activeFilter === "buyNow"
-                    ? "bg-[#f97316] text-white"
-                    : "bg-[#1a1d27] text-gray-400 hover:text-white"
-                }`}
-              >
-                Mua ngay
-              </button>
-              <button
-                onClick={() => setActiveFilter("month")}
-                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition ${
-                  activeFilter === "month"
-                    ? "bg-[#f97316] text-white"
-                    : "bg-[#1a1d27] text-gray-400 hover:text-white"
-                }`}
-              >
-                Tháng này
-              </button>
+              {["all", "auction", "buyNow", "month"].map((filterKey) => {
+                const labels: Record<string, string> = {
+                  all: "Tất cả",
+                  auction: "Đấu giá",
+                  buyNow: "Mua ngay",
+                  month: "Tháng này"
+                };
+                return (
+                  <button
+                    key={filterKey}
+                    onClick={() => setActiveFilter(filterKey as any)}
+                    className={`px-5 py-2.5 rounded-xl text-sm font-bold transition cursor-pointer ${
+                      activeFilter === filterKey
+                        ? "bg-[#f97316] text-white"
+                        : "bg-[#1a1d27] text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    {labels[filterKey]}
+                  </button>
+                );
+              })}
             </div>
           </div>
-          <GenericTable data={filteredProducts} columns={columns} />
+          
+          {loading ? (
+             <div className="py-10 text-center text-gray-500 font-medium">Đang tải dữ liệu...</div>
+          ) : (
+             <GenericTable data={filteredProducts} columns={columns} />
+          )}
         </div>
       </main>
     </div>
